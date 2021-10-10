@@ -8,24 +8,12 @@ from datetime import datetime
 import tifffile
 from io import BytesIO
 import requests
+import os
 import rasterio
 
 __version__ = '0.0.0'
 
 s = requests.Session()
-
-
-def model(r):
-    return(r)
-blockId = '983fd41b-b089-4764-b685-e6435d2c9a7a'
-captureId = "921711ce-14aa-4b8a-8762-5ae166931ddb"
-targetBlockId = 'c0381d03-0e40-4a5a-a574-b364312af66f'
-targetCaptureId = "737d5290-2189-4a5d-8957-5865513f8481"
-inputWidth = 512
-token  = el.logIn('admin', '76MqJKEM9UcjaJA')
-temp_folder = '/home/daniel/Downloads/test'
-
-
 
 
 def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputWidth, token, temp_folder):
@@ -55,7 +43,7 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
     startDate = datetime.strptime(startDate, '%Y-%m-%dT%H:%M:%S.%fZ')
     endDate = datetime.strptime(endDate, '%Y-%m-%dT%H:%M:%S.%fZ')
     num_bands = len(metadata['bands'])
-
+    print('creating a capture to write in')
     targetCaptureId = el.addTimestamp(mapId = targetBlockId, startDate=startDate, endDate = endDate, token=token)['id']
 
     bounds = el.getBounds(blockId, timestampNumber, token)
@@ -76,9 +64,9 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
         
     bands_out = output.shape[2]    
     
-    
     bound = bounds[0]        
     for bound in bounds:
+        print('applying model to first connected component')
         x1, y1, x2, y2  = bound.bounds
         x1_osm =  math.floor((x1 +180 ) * 2**zoom / 360 )
         x2_osm =  math.floor( (x2 +180 ) * 2**zoom / 360)
@@ -129,16 +117,18 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
                 yMin = (2**zoom - y - 10*w)/2**zoom * 2*2.003751e+07 - 2.003751e+07
                 trans = rasterio.transform.from_bounds(xMin, yMin, xMax, yMax, r_out.shape[2], r_out.shape[1])
                 crs = "EPSG:3857"
-                with rasterio.open( temp_folder + '/' + str(frac) + ".tif", 'w', compress="lzw",
+                file = temp_folder + '/' + str(frac) + ".tif"
+                with rasterio.open( file, 'w', compress="lzw",
                                    tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*inputWidth, height=10*inputWidth, dtype = 'float32', transform=trans, crs=crs) as dataset:
-                    dataset.write(r_out)                
+                    dataset.write(r_out)
+                el.uploadRasterFile(mapId = targetBlockId, timestampId = targetCaptureId, file = file, token = token)
+                os.remove(file)
                 y = y+10*w
-                print('X')
-                print(frac)
-                print(x)
-                print(y)
                 
             x = x+10*w
+        print('activating timestamp')
+        el.activateTimestamp(mapId = targetBlockId, timestampId=targetCaptureId, active = True, token = token)
+        print('capture activated result will be available soon')
 
-
+        
 
