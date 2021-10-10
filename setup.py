@@ -20,23 +20,8 @@ setuptools.setup(
     ],
     packages=find_packages(),
     install_requires=[
-    'pandas',
     'ellipsis',
-    'Pillow',
-    'geopandas==0.9.0',
-    'pyproj==3.0.1',
     'numpy',
-    'requests',
-    'requests-toolbelt',
-    'rasterio',
-    'Shapely',
-    'geopy',
-    'xmltodict',
-    'opencv-python',
-    'Fiona',
-    'tifffile',
-    'keras==2.2.2',
-    'imagecodecs'
     ],
     python_requires='>=3.6',
 )

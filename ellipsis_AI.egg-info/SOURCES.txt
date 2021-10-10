@@ -1,0 +1,10 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+ellipsis-AI/__init__.py
+ellipsis_AI.egg-info/PKG-INFO
+ellipsis_AI.egg-info/SOURCES.txt
+ellipsis_AI.egg-info/dependency_links.txt
+ellipsis_AI.egg-info/requires.txt
+ellipsis_AI.egg-info/top_level.txt
