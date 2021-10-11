@@ -10,12 +10,8 @@ from io import BytesIO
 import requests
 import os
 import rasterio
-import geopandas as gpd
-from shapely import geometry
-import pandas as pd
 
 __version__ = '0.0.1'
-url = 'https://api.ellipsis-drive.com/v1'
 
 s = requests.Session()
 
@@ -35,10 +31,6 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
     w = int(inputWidth / 256)
 
     metadata = el.metadata(blockId, False, token)
-    
-    if metadata['isShape']:
-        raise ValueError('blockId is of type vector but must be of type raster')
-    
     captures = [c for c in metadata['timestamps'] if c['id'] == captureId]
     
     if len(captures) == 0:
@@ -107,7 +99,7 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
                                 frac = frac+1
                                 el.loadingBar( frac, total)
                                 
-                                url_req = url + '/v1/tileService/' + blockId + '/' + str(timestampNumber) + '/data/' + str(zoom) + '/' + str(x+N*w+ i) + '/' + str(y+M*w+j) + token_inurl
+                                url_req = 'https://api.ellipsis-drive.com/v1/tileService/' + blockId + '/' + str(timestampNumber) + '/data/' + str(zoom) + '/' + str(x+N*w+ i) + '/' + str(y+M*w+j) + token_inurl
                                 r = s.get(url_req , timeout = 10 )
                                 if int(str(r).split('[')[1].split(']')[0]) == 403:
                                         raise ValueError('insufficient access')
@@ -138,113 +130,5 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
         el.activateTimestamp(mapId = targetBlockId, timestampId=targetCaptureId, active = True, token = token)
         print('capture activated result will be available soon')
 
-
-def getTiles(blockId, captureId, inputWidth, token):
-    
-    inputWidth = int(inputWidth)    
-    if inputWidth % 256 != 0 or inputWidth <=0:
-        raise ValueError("inputWidth needs to be a multiple of 256 and must be larger than zero.")
-
-    if type(token) != type('x'):
-        raise ValueError('token must be of type string')
-
-    w = int(inputWidth / 256)
-
-    metadata = el.metadata(blockId, False, token)
-    if metadata['isShape']:
-        raise ValueError('blockId is of type vector but must be of type raster')
-
-    captures = [c for c in metadata['timestamps'] if c['id'] == captureId]
-    
-    if len(captures) == 0:
-        raise ValueError('given captureId does not exist')
-    capture = captures[0]
-    timestampNumber = capture['timestamp']
-
-    zoom = capture['zoom']
-    
-    zoom = zoom + w -1
-    
-    bounds = el.getBounds(blockId, timestampNumber, token)
-    
-    if str(type(bounds)) == "<class 'shapely.geometry.polygon.Polygon'>":
-        bounds = [bounds]
-    else:
-        bounds = [b for b in bounds]
-
-    shape = gpd.GeoDataFrame({'geometry':bounds})
-    
-    i=0
-    tiles_total = []
-    for i in np.arange(shape.shape[0]):
-        area = shape['geometry'].values[i]
-        x1, y1, x2, y2  = area.bounds
         
-        #find the x osm tiles involved   
-        x1_osm =  math.floor((x1 +180 ) * 2**zoom / 360 )
-        x2_osm =  math.floor( (x2 +180 ) * 2**zoom / 360)
-        y2_osm = math.floor( 2**zoom / (2* math.pi) * ( math.pi - math.log( math.tan(math.pi / 4 + y1/360 * math.pi  ) ) ))
-        y1_osm = math.floor( 2**zoom / (2* math.pi) * ( math.pi - math.log( math.tan(math.pi / 4 + y2/360 * math.pi  ) ) ))
-        
-        y1_osm = max(0,y1_osm)
-        y2_osm = min(2**zoom-1,y2_osm)
-        x1_osm = max(0,x1_osm)
-        x2_osm = min(2**zoom-1,x2_osm)
 
-        xs = np.arange(x1_osm, x2_osm + 1)
-        ys = np.arange(y1_osm, y2_osm +1)
-
-        ids = [ (x,y) for x in xs for y in ys ]
-
-        xs = [x[0] for x in ids]
-        ys = [y[1] for y in ids]
-
-
-        y2s = [(2* math.atan( math.e**(math.pi - (y) * 2*math.pi / 2**zoom) ) - math.pi/2) * 360/ (2* math.pi)  for y in ys]
-        y1s = [(2* math.atan( math.e**(math.pi - (y+1) * 2*math.pi / 2**zoom) ) - math.pi/2) * 360/ (2* math.pi) for y in ys]
-        x1s = [x * 360/2**zoom - 180 for x in xs] 
-        x2s = [(x +1) * 360/2**zoom - 180 for x in xs]
-
-        tiles = [ geometry.Polygon([(x1s[i],y1s[i]), (x1s[i],y2s[i]), (x2s[i],y2s[i]), (x2s[i],y1s[i])]) for i in np.arange(len(y1s))]
-
-
-        tiles = gpd.GeoDataFrame({'geometry':tiles, 'x_osm': xs, 'y_osm':ys, 'x1':x1s, 'x2':x2s,'y1':y1s, 'y2':y2s})
-        tiles.crs = {'init': 'epsg:4326'}
-        tiles_merc = tiles.to_crs({'init': 'epsg:3857'})
-        bounds = tiles_merc.bounds
-        tiles['x1_merc'] = bounds['minx'].values
-        tiles['x2_merc'] = bounds['maxx'].values
-        tiles['y1_merc'] = bounds['miny'].values
-        tiles['y2_merc'] = bounds['maxy'].values
-
-
-        tiles_total = tiles_total + [tiles]
-
-
-    covering = pd.concat(tiles_total)
-    covering = covering.drop_duplicates(['x_osm','y_osm'])
-
-    covering['zoom'] = zoom
-
-    covering['id'] = np.arange(covering.shape[0])
-    return(covering)
-    
-
-def getTileContent(blockId, captureId, tileX, tileY, tileZoom, token ):
-    
-    if type(token) != type('x'):
-        raise ValueError('token must be of type string')
-
-    token_inurl = '?token=' + token.replace('Bearer ', '')
-    url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/data/' + str(tileZoom) + '/' + str(tileX) + '/' + str(tileY) + token_inurl
-    r = s.get(url_req , timeout = 10 )
-    if int(str(r).split('[')[1].split(']')[0]) == 403:
-            return({'status':403, 'message':'Insufficient permission'})
-    elif int(str(r).split('[')[1].split(']')[0]) != 200:
-            return({'status':400, 'message':'Tile not found'})
-    else:
-        r = np.transpose(tifffile.imread(BytesIO(r.content)), [1,2,0] )      
-        return({'status':200, 'message':r})
-    
-    
-    

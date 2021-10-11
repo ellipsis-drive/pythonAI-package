@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="ellipsis-AI",
-    version="0.0.0",
+    version="0.0.1",
     author="Daniel van der Maas",
     author_email="daniel@ellipsis-drive.com",
     description="Package to use Ellipsis Drive for AI",
@@ -22,6 +22,12 @@ setuptools.setup(
     install_requires=[
     'ellipsis',
     'numpy',
+    'tifffile',
+    'requests',
+    'rasterio',
+    'geopandas',
+    'shapely',
+    'pandas'
     ],
     python_requires='>=3.6',
 )
