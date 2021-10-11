@@ -8,7 +8,7 @@ pip install ellipsis-AI
 
 ### Functions
 
-####applyModel
+#### applyModel
 
 ```python
 applyModel(model, blockId, captureId, targetBlockId, targetCaptureId, inputWidth, token, visualizationId= None)
@@ -28,7 +28,7 @@ This function applies the given model to the raster in the specified capture of 
 
 
 
-####getTiles
+#### getTiles
 
 ```python
 getTiles(blockId, captureId, inputWidth, token)
@@ -43,7 +43,7 @@ This function gets all ids of tiles of size inputWidth covering the specified ca
 | inputWidth        | input width and height of the numpy array|
 | token        | Your token|
 
-####getTileData
+#### getTileData
 
 ```python
 getTileData(blockId, captureId, tileX, tileY, tileZoom, token, visualizationId= None )
