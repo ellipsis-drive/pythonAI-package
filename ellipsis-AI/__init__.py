@@ -20,7 +20,7 @@ url = 'https://api.ellipsis-drive.com/v1'
 s = requests.Session()
 
 
-def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputWidth, token, temp_folder):
+def applyModel(model, blockId, captureId, targetBlockId, inputWidth, token, temp_folder, visualizationId = None):
 
     inputWidth = int(inputWidth)    
     if inputWidth % 256 != 0 or inputWidth <=0:
@@ -50,7 +50,11 @@ def applyModel(model, blockId, captureId, targetBlockId, visualizationId, inputW
     zoom = capture['zoom']
     startDate = datetime.strptime(startDate, '%Y-%m-%dT%H:%M:%S.%fZ')
     endDate = datetime.strptime(endDate, '%Y-%m-%dT%H:%M:%S.%fZ')
-    num_bands = len(metadata['bands'])
+    if type(visualizationId) == type(None):
+        num_bands = len(metadata['bands'])
+        visualizationId = 'data'
+    else:
+        num_bands = 4
     print('creating a capture to write in')
     targetCaptureId = el.addTimestamp(mapId = targetBlockId, startDate=startDate, endDate = endDate, token=token)['id']
 
@@ -208,7 +212,7 @@ def getTiles(blockId, captureId, inputWidth, token):
         tiles = [ geometry.Polygon([(x1s[i],y1s[i]), (x1s[i],y2s[i]), (x2s[i],y2s[i]), (x2s[i],y1s[i])]) for i in np.arange(len(y1s))]
 
 
-        tiles = gpd.GeoDataFrame({'geometry':tiles, 'x_osm': xs, 'y_osm':ys, 'x1':x1s, 'x2':x2s,'y1':y1s, 'y2':y2s})
+        tiles = gpd.GeoDataFrame({'geometry':tiles, 'tileX': xs, 'tileY':ys, 'x1':x1s, 'x2':x2s,'y1':y1s, 'y2':y2s})
         tiles.crs = {'init': 'epsg:4326'}
         tiles_merc = tiles.to_crs({'init': 'epsg:3857'})
         bounds = tiles_merc.bounds
@@ -222,21 +226,25 @@ def getTiles(blockId, captureId, inputWidth, token):
 
 
     covering = pd.concat(tiles_total)
-    covering = covering.drop_duplicates(['x_osm','y_osm'])
+    covering = covering.drop_duplicates(['tileX','tileY'])
 
-    covering['zoom'] = zoom
+    covering['tileZoom'] = zoom
 
     covering['id'] = np.arange(covering.shape[0])
     return(covering)
     
 
-def getTileContent(blockId, captureId, tileX, tileY, tileZoom, token ):
+def getTileData(blockId, captureId, tileX, tileY, tileZoom, token, visualizationId = None ):
     
     if type(token) != type('x'):
         raise ValueError('token must be of type string')
 
+    if type(visualizationId) == type(None):
+        visualizationId = 'data'
+
+
     token_inurl = '?token=' + token.replace('Bearer ', '')
-    url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/data/' + str(tileZoom) + '/' + str(tileX) + '/' + str(tileY) + token_inurl
+    url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/' + visualizationId + '/' + str(tileZoom) + '/' + str(tileX) + '/' + str(tileY) + token_inurl
     r = s.get(url_req , timeout = 10 )
     if int(str(r).split('[')[1].split(']')[0]) == 403:
             return({'status':403, 'message':'Insufficient permission'})
