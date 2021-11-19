@@ -138,7 +138,7 @@ def applyModel(model, blockId, captureId, targetBlockId, inputWidth, token, temp
                                    tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*inputWidth, height=10*inputWidth, dtype = 'float32', transform=trans, crs=crs) as dataset:
                     dataset.write(r_out)
                 el.uploadRasterFile(mapId = targetBlockId, timestampId = targetCaptureId, file = file, token = token)
-                #os.remove(file)
+                os.remove(file)
                 y = y+10*w
                 
             x = x+10*w
