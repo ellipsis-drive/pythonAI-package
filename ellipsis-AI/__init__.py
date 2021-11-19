@@ -13,6 +13,7 @@ import rasterio
 import geopandas as gpd
 from shapely import geometry
 import pandas as pd
+from PIL import Image
 
 __version__ = '0.0.1'
 url = 'https://api.ellipsis-drive.com/v1'
@@ -111,14 +112,16 @@ def applyModel(model, blockId, captureId, targetBlockId, inputWidth, token, temp
                                 frac = frac+1
                                 el.loadingBar( frac, total)
                                 
-                                url_req = url + '/v1/tileService/' + blockId + '/' + str(timestampNumber) + '/data/' + str(zoom) + '/' + str(x+N*w+ i) + '/' + str(y+M*w+j) + token_inurl
+                                url_req = url + '/v1/tileService/' + blockId + '/' + str(timestampNumber) + '/' + visualizationId + '/' + str(zoom) + '/' + str(x+N*w+ i) + '/' + str(y+M*w+j) + token_inurl
                                 r = s.get(url_req , timeout = 10 )
                                 if int(str(r).split('[')[1].split(']')[0]) == 403:
                                         raise ValueError('insufficient access')
                                 elif int(str(r).split('[')[1].split(']')[0]) != 200:
                                     r = np.zeros((256,256,num_bands))
-                                else:
+                                elif visualizationId == 'data':
                                     r = np.transpose(tifffile.imread(BytesIO(r.content)), [1,2,0] )      
+                                else:
+                                   r = np.array(Image.open(BytesIO(r.content)), dtype = 'uint8')
                                 r_in[256*j: 256*(j+1),256*i: 256*(i+1), :] = r
                         r_out[M*inputWidth:(M+1)*inputWidth, N*inputWidth:(N+1)*inputWidth, :] = model(r_in)
                 r_out = np.transpose(r_out, [2,0,1])
@@ -250,9 +253,13 @@ def getTileData(blockId, captureId, tileX, tileY, tileZoom, token, visualization
             return({'status':403, 'message':'Insufficient permission'})
     elif int(str(r).split('[')[1].split(']')[0]) != 200:
             return({'status':400, 'message':'Tile not found'})
-    else:
+    elif visualizationId == 'data':
         r = np.transpose(tifffile.imread(BytesIO(r.content)), [1,2,0] )      
-        return({'status':200, 'message':r})
+    else:
+       r = np.array(Image.open(BytesIO(r.content)), dtype = 'uint8')
+
+
+    return({'status':200, 'message':r})
     
     
     
