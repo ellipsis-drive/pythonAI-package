@@ -3,7 +3,7 @@ This package is meant to help you run models on Ellipsis Drive content. It shoul
 
 ### Install
 ```python
-pip install ellipsis-AI
+pip install ellipsisAI
 ```
 
 ### Functions
