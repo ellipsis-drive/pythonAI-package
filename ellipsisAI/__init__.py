@@ -95,7 +95,7 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
     print('creating a capture to write in')
 
     targetCaptureId = el.addTimestamp(mapId = targetBlockId, startDate=targetStartDate, endDate = targetEndDate, token=token)['id']
-
+    print('writing to capture ' + targetCaptureId)
     if  str(type(bounds)) != "<class 'shapely.geometry.polygon.Polygon'>" and str(type(bounds)) != "<class 'shapely.geometry.multiPolygon.MultiPolygon'>":
         raise ValueError('Bounds must be a shapely polygon or multipolygon')
         
@@ -104,25 +104,25 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
     else:
         bounds = [b for b in bounds]
 
-    output = model({'tileX':0, 'tileY':0, 'zoom':0})
+    output = model({'tileX':0, 'tileY':0, 'zoom':classificationZoom})
 
     if str(type(output)) != "<class 'numpy.ndarray'>":
         raise ValueError('Output of model funciton must be a 3 dimensional numpy array')
-    
+        
     if output.shape[0] != output.shape[1]:
         raise ValueError('First and second dimension of the resutling numpy array of model should have equal length.')
     if len(output.shape) != 3:
         raise ValueError('Output of model funciton mus ba a 3 dimensional numpy array')
     outputWidth = output.shape[0]
     bands_out = output.shape[2]    
-
+    
     if outputWidth >2048 or bands_out > 40:
         raise ValueError("output width of model may not exceed 2048 by 2048 by 40.")
 
 
     bound = bounds[0]        
     for bound in bounds:
-        print('applying model to first connected component')
+        print('applying model to a connected component of the bounds')
         x1, y1, x2, y2  = bound.bounds
         x1_osm =  math.floor((x1 +180 ) * 2**classificationZoom / 360 )
         x2_osm =  math.floor( (x2 +180 ) * 2**classificationZoom / 360)
@@ -140,29 +140,31 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
         while x < x2_osm:
             y=y1_osm
             while y < y2_osm:
-                r_out = np.zeros(( 10*outputWidth*256, 10*outputWidth*256, bands_out+1))
+                r_out = np.zeros(( 10*outputWidth, 10*outputWidth, bands_out+1))
                 r_out[:,:,:] = targetNoDataValue
+                N = 0
                 for N in np.arange(10):
+                    M=0
                     for M in np.arange(10):
+                        frac = frac+1
                         el.loadingBar( frac, total)
                         tile = {'zoom':classificationZoom, 'tileX':x+N, 'tileY':y+M}
                         r_out[M*outputWidth:(M+1)*outputWidth, N*outputWidth:(N+1)*outputWidth, 0:bands_out] = model(tile)
 
 
-                r_out[r_out[:,:,-1] ==targetNoDataValue,:] = 0                        
+                r_out[r_out[:,:,-2] ==targetNoDataValue,:] = 0                        
                 r_out = np.transpose(r_out, [2,0,1])
                 r_out = r_out.astype('float32')
                 xMin = x/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
-                xMax = (x + 1)/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
-                yMax = (2**classificationZoom - y)/2**classificationZoom * 2 * 2.003751e+07 - 2.003751e+07
-                yMin = (2**classificationZoom - y + 1)/2**classificationZoom * 2*2.003751e+07 - 2.003751e+07
+                xMax = (x + 10)/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
+                yMin = (2**classificationZoom - y-10)/2**classificationZoom * 2 * 2.003751e+07 - 2.003751e+07
+                yMax = (2**classificationZoom - y )/2**classificationZoom * 2*2.003751e+07 - 2.003751e+07
                 trans = rasterio.transform.from_bounds(xMin, yMin, xMax, yMax, r_out.shape[2], r_out.shape[1])
                 crs = "EPSG:3857"
                 file = temp_folder + '/' + str(frac) + ".tif"
 
                 
-                with rasterio.open( file, 'w', compress="lzw",
-                                   tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*outputWidth, height=10*outputWidth, dtype = 'float32', transform=trans, crs=crs) as dataset:
+                with rasterio.open( file, 'w', compress="lzw", tiled=True, blockxsize=256, blockysize=256, count = bands_out+1, width=10*outputWidth, height=10*outputWidth, dtype = 'float32', transform=trans, crs=crs) as dataset:
                     dataset.write(r_out)
                 el.uploadRasterFile(mapId = targetBlockId, timestampId = targetCaptureId, file = file, token = token)
                 os.remove(file)
@@ -170,11 +172,13 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
                 y = y+10                
             x = x+10
 
-        
-        r = s.post(url + '/settings/projects/includesTransparent', headers = {"Authorization":token},
-                         json = {"mapId":  targetBlockId, 'includesTransparent':True})
-        if int(str(r).split('[')[1].split(']')[0]) != 200:
-            raise ValueError(r.text)
+        metadata = el.metadata(targetBlockId, False, token)
+        captures = [c for c in metadata['timestamps'] if c['finished']]
+        if len(captures) ==0:
+            r = s.post(url + '/settings/projects/includesTransparent', headers = {"Authorization":token},
+                             json = {"mapId":  targetBlockId, 'includesTransparent':True})
+            if int(str(r).split('[')[1].split(']')[0]) != 200:
+                raise ValueError(r.text)
 
         print('activating timestamp')
         el.activateTimestamp(mapId = targetBlockId, timestampId=targetCaptureId, active = True, token = token)
@@ -259,17 +263,18 @@ def getTileData(blockId, captureId, tile, token, visualizationId = None, downsam
     tileY = tile['tileY']
     tileZoom = tile['zoom']
     
-    def getTile(token_inurl, blockId, captureId, visualizationId,x,y,zoom ):
+    def getTile(token_inurl, blockId, captureId, visualizationId,x,y,zoom, num_bands ):
         url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/' + visualizationId + '/' + str(zoom) + '/' + str(x) + '/' + str(y) + token_inurl
         r = s.get(url_req , timeout = 10 )
         if int(str(r).split('[')[1].split(']')[0]) == 403:
-                return({'status':403, 'message':'Insufficient permission'})
+                raise ValueError('Insufficient permission for block ' + blockId)
         elif int(str(r).split('[')[1].split(']')[0]) != 200:
-                return({'status':400, 'message':'Tile not found'})
+                r = np.zeros((256,256,num_bands))
         elif visualizationId == 'data':
             r = np.transpose(tifffile.imread(BytesIO(r.content)), [1,2,0] )      
         else:
            r = np.array(Image.open(BytesIO(r.content)), dtype = 'uint8')
+        return(r)
         
 
     if type(token) != type('x'):
@@ -293,10 +298,10 @@ def getTileData(blockId, captureId, tile, token, visualizationId = None, downsam
 
     if nativeZoom >= tileZoom:
         factor = 2**(nativeZoom - tileZoom)            
-        r_total = np.zeros((256*factor , 256*factor, num_bands))        
+        r_total = np.zeros((256*factor , 256*factor, num_bands))
         for x in np.arange(factor):
             for y in np.arange(factor):
-                r = getTile(token_inurl, blockId, captureId, visualizationId, tileX*factor + x, tileY*factor+y,nativeZoom )                
+                r = getTile(token_inurl, blockId, captureId, visualizationId, tileX*factor + x, tileY*factor+y,nativeZoom, num_bands )
                 r_total[ y*256: (y*256 + 256), x*256: (x*256 + 256) ,:] = r
 
     else:
