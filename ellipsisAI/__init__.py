@@ -77,7 +77,7 @@ def getBounds(blockId, captureId, token):
     
     return(bounds)
 
-def applyModelToCapture(model, bounds, targetBlockId, classificationZoom, token, temp_folder, visualizationId = None, targetNoDataValue = 0, targetStartDate = None, targetEndDate = None):
+def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_folder, visualizationId = None, targetNoDataValue = 0, targetStartDate = None, targetEndDate = None):
 
     if type(targetStartDate) == type(None):
         targetStartDate = datetime.now()
@@ -149,7 +149,7 @@ def applyModelToCapture(model, bounds, targetBlockId, classificationZoom, token,
                         r_out[M*outputWidth:(M+1)*outputWidth, N*outputWidth:(N+1)*outputWidth, 0:bands_out] = model(tile)
 
 
-                r_out[r_out[:,:,0] ==targetNoDataValue,:] = 0                        
+                r_out[r_out[:,:,-1] ==targetNoDataValue,:] = 0                        
                 r_out = np.transpose(r_out, [2,0,1])
                 r_out = r_out.astype('float32')
                 xMin = x/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
@@ -252,12 +252,15 @@ def getTiles(bounds, classificationZoom):
     
     
 
-def getTileData(blockId, captureId, tileX, tileY, tileZoom, token, visualizationId = None, downsampleFactor = 1 ):
+def getTileData(blockId, captureId, tile, token, visualizationId = None, downsampleFactor = 1 ):
 
+    
+    tileX = tile['tileX']
+    tileY = tile['tileY']
+    tileZoom = tile['zoom']
     
     def getTile(token_inurl, blockId, captureId, visualizationId,x,y,zoom ):
         url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/' + visualizationId + '/' + str(zoom) + '/' + str(x) + '/' + str(y) + token_inurl
-        print(url_req)
         r = s.get(url_req , timeout = 10 )
         if int(str(r).split('[')[1].split(']')[0]) == 403:
                 return({'status':403, 'message':'Insufficient permission'})
@@ -302,12 +305,7 @@ def getTileData(blockId, captureId, tileX, tileY, tileZoom, token, visualization
         x = math.floor(tileX/factor)
         y = math.floor(tileY/factor)
         r = getTile(token_inurl, blockId, captureId, visualizationId, x, y,nativeZoom )                
-
-
-        
-        L = 2**(tileZoom - nativeZoom  )
-        factor = 256/L
-        
+      
         starty =   (tileY - y*factor) * 256/factor
         endy = (tileY - y*factor + 1) * 256/factor
         startx =   (tileX - x*factor) * 256/factor
