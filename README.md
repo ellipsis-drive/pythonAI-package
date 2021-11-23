@@ -24,7 +24,7 @@ classificationZoom = ai.getZoom(blockId, captureId, token)
 bounds = ai.getBounds(blockId, captureId, token)
 
 
-#we create a dummy model. We use the identity funciton mapping an image to itself
+#we create a dummy model. We use the identity function mapping an image to itself. We use the getTleData function to retirve the image for the given input tile ofthe model.
 def model(tile):
     image = ai.getTileData(blockId, captureId, tile, token)
     return(image)
