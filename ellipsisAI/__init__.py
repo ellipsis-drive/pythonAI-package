@@ -15,7 +15,7 @@ from shapely import geometry
 import pandas as pd
 from PIL import Image
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 url = 'https://api.ellipsis-drive.com/v1'
 
 s = requests.Session()
@@ -133,7 +133,7 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
         x1_osm = max(0,x1_osm)
         x2_osm = min(2**classificationZoom-1,x2_osm)
         
-        total = (x2_osm - x1_osm+1) * (y2_osm-y1_osm +1)
+        total = (x2_osm - x1_osm+1 + (10 - (x2_osm - x1_osm+1)%10 ) ) * (y2_osm-y1_osm +1 + (10 - (y2_osm-y1_osm +1) % 10) )
         frac = 0
         
         x = x1_osm
@@ -141,7 +141,7 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
             y=y1_osm
             while y < y2_osm:
                 r_out = np.zeros(( 10*outputWidth, 10*outputWidth, bands_out+1))
-                r_out[:,:,:] = targetNoDataValue
+
                 N = 0
                 for N in np.arange(10):
                     M=0
@@ -152,7 +152,7 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
                         r_out[M*outputWidth:(M+1)*outputWidth, N*outputWidth:(N+1)*outputWidth, 0:bands_out] = model(tile)
 
 
-                r_out[r_out[:,:,-2] ==targetNoDataValue,:] = 0                        
+                r_out[r_out[:,:,-2] !=targetNoDataValue,-1] = 1
                 r_out = np.transpose(r_out, [2,0,1])
                 r_out = r_out.astype('float32')
                 xMin = x/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
@@ -180,7 +180,7 @@ def applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fol
             if int(str(r).split('[')[1].split(']')[0]) != 200:
                 raise ValueError(r.text)
 
-        print('activating timestamp')
+        print('activating capture')
         el.activateTimestamp(mapId = targetBlockId, timestampId=targetCaptureId, active = True, token = token)
         print('capture activated result will be available soon')
 
@@ -233,14 +233,10 @@ def getTiles(bounds, classificationZoom):
         tiles = [ geometry.Polygon([(x1s[i],y1s[i]), (x1s[i],y2s[i]), (x2s[i],y2s[i]), (x2s[i],y1s[i])]) for i in np.arange(len(y1s))]
 
 
-        tiles = gpd.GeoDataFrame({'geometry':tiles, 'tileX': xs, 'tileY':ys, 'x1':x1s, 'x2':x2s,'y1':y1s, 'y2':y2s})
+        tiles = gpd.GeoDataFrame({'geometry':tiles, 'tileX': xs, 'tileY':ys})
         tiles.crs = {'init': 'epsg:4326'}
         tiles_merc = tiles.to_crs({'init': 'epsg:3857'})
         bounds = tiles_merc.bounds
-        tiles['x1_merc'] = bounds['minx'].values
-        tiles['x2_merc'] = bounds['maxx'].values
-        tiles['y1_merc'] = bounds['miny'].values
-        tiles['y2_merc'] = bounds['maxy'].values
 
 
         tiles_total = tiles_total + [tiles]
