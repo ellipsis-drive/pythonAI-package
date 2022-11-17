@@ -27,8 +27,8 @@ bounds = el.path.raster.timestamp.getBounds(pathId, timestampId, token)
 #we create a dummy model. We use the identity function mapping an image to itself. We use the getTleData function to retirve the image for the given input tile ofthe model.
 def model(bounds):
     extent = {'xMin':bounds.bounds[0],'yMin':bounds.bounds[1],'xMax':bounds.bounds[2],'yMax':bounds.bounds[3]}
-    image = el.path.raster.timestamp.getRaster(pathId=pathId, timestampId=timestampId, extent = extent,  token= token)
-    return(image)
+    result = el.path.raster.timestamp.getRaster(pathId=pathId, timestampId=timestampId, extent = extent,  token= token)
+    return(result)
 
 #apply the model on the given bounds on the given zoomlevel
 ai.applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder)
