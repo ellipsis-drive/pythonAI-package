@@ -14,7 +14,7 @@ import ellipsis as el
 pathId = '170aadad-8eaa-4509-9c0e-c1536d58a1fe'
 timestampId = "633b4b9f-d939-4c4a-8d90-0e9fceb64b83"
 targetPathId = "066458f4-f018-4f49-a1f0-dedfa71b3368"
-temp_folder = 'YOUR_PATH'
+tempFolder = 'YOUR_PATH'
 
 #login to get a authentication token
 token = el.account.logIn('YOUR_USERNAME','YOUR_PASSWORD')
@@ -31,7 +31,7 @@ def model(bounds):
     return(image)
 
 #apply the model on the given bounds on the given zoomlevel
-ai.applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_folder)
+ai.applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder)
 ```
 
 
