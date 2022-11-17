@@ -20,8 +20,8 @@ temp_folder = 'YOUR_PATH'
 token = el.account.logIn('YOUR_USERNAME','YOUR_PASSWORD')
 
 #retrieve the zoom and bounds of the capture you wish to classify
-classificationZoom = ai.getZoom(pathId, timestampId, token)
-bounds = ai.getBounds(pathId, timestampId, token)
+classificationZoom = [t for t in el.path.get(pathId, token)['raster']['timestamps'] if t['id']== timestampId ][0]['zoom']
+bounds = el.path.raster.timestamp.getBounds(pathId, timestampId, token)
 
 
 #we create a dummy model. We use the identity function mapping an image to itself. We use the getTleData function to retirve the image for the given input tile ofthe model.
@@ -36,36 +36,6 @@ ai.applyModel(model, bounds, targetBlockId, classificationZoom, token, temp_fold
 
 
 ### Functions
-
-#### getZoom
-
-```python
-getZoom(pathId, timestampId, token)
-```
-
-This function retrieves the max zoomlevel of the specified timestamp. The result can be used as classificationZoom argument in the applyModel or getTiles function.
-
-| Name        | Description |
-| ----------- | -----------|
-| pathId     | The id of the path |
-| timestampId     | The id of the timestamp |
-| token        | Your token|
-
-
-#### getBounds
-
-```python
-getBounds(pathId, timestampId, token)
-```
-
-This function retrieves the bounds of the specified timestamp. The result can be used as bounds argument in the applyModel function.
-
-| Name        | Description |
-| ----------- | -----------|
-| pathId     | The id of the path |
-| timestampId     | The id of the timestamp |
-| token        | Your token|
-
 
 #### applyModel
 
