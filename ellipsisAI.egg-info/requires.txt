@@ -1,0 +1,9 @@
+Pillow
+ellipsis
+geopandas
+numpy
+pandas
+rasterio
+requests
+shapely
+tifffile
