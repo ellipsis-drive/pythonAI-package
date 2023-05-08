@@ -13,18 +13,23 @@ import rasterio
 import geopandas as gpd
 from shapely import geometry
 import pandas as pd
-from PIL import Image
 
 __version__ = '0.1.0'
-url = 'https://api.ellipsis-drive.com/v1'
+url = 'https://api.ellipsis-drive.com/v3'
 
 s = requests.Session()
 
 cacheZoom = {}
 cacheBands = {}
 
+    
 
-def getZoom(pathId, timestampId, token):
+def getZoom(pathId, timestampId, token = None):
+    
+    pathId = el.sanitize.validUuid('pathId', pathId, True)
+    timestampId = el.sanitize.validUuid('timestampId', timestampId, True)
+    token = el.validString('token', token, False)    
+    
     blockId = pathId
     captureId = timestampId
     
@@ -32,7 +37,7 @@ def getZoom(pathId, timestampId, token):
     if key in cacheZoom.keys():
         return(cacheZoom[key])
 
-    metadata = el.path.get(blockId, token)
+    metadata = el.path.get(pathId = blockId, token = token)
     
     if metadata['type'] != 'raster':
         raise ValueError('pathId is of type vector but must be of type raster')
@@ -40,7 +45,7 @@ def getZoom(pathId, timestampId, token):
     captures = [c for c in metadata['raster']['timestamps'] if c['id'] == captureId]
     
     if len(captures) == 0:
-        raise ValueError('given captureId does not exist')
+        raise ValueError('given timestampId does not exist')
 
     zoom = captures[0]['zoom']
     
@@ -49,29 +54,16 @@ def getZoom(pathId, timestampId, token):
     return(zoom)
 
 
-def getNumBands(pathId, timestampId, token):
+
+
+
+def getBounds(pathId, timestampId, token = None):
     
-    blockId = pathId
-    captureId = timestampId
+    pathId = el.sanitize.validUuid('pathId', pathId, True)
+    timestampId = el.sanitize.validUuid('timestampId', timestampId, True)
+    token = el.sanitize.validString('token', token, False)    
     
-    key = blockId + '_' + captureId
-    if key in cacheBands.keys():
-        return(cacheBands[key])
-
-    metadata = el.path.get(blockId, token)
     
-    if metadata['type'] != 'raster':
-        raise ValueError('pathId is of type vector but must be of type raster')
-    
-
-    numBands = len(metadata['raster']['bands'])
-        
-    cacheBands[key] = numBands
-    return(numBands)
-
-
-
-def getBounds(pathId, timestampId, token):
     blockId = pathId
     captureId = timestampId
     metadata = el.path.get(blockId, token)
@@ -90,12 +82,27 @@ def getBounds(pathId, timestampId, token):
     
     return(bounds)
 
-def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_folder, modelNoDataValue = -1, targetStartDate = None, targetEndDate = None):
-    targetBlockId = targetPathId
-    if type(targetStartDate) == type(None):
+def applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder, modelNoDataValue = -1, targetDate = None):
+    def f():
+        return
+
+    if type(targetDate) == type(None):
         targetStartDate = datetime.now()
-    if type(targetEndDate) == type(None):
         targetEndDate = targetStartDate
+
+
+
+    if(type(model) != type(f)):
+        raise ValueError('model must be a function')
+        
+    targetPathId = el.sanitize.validUuid('targetPathId', targetPathId, True)
+    bounds = el.sanitize.validShapely('bounds', bounds, True)
+    classificationZoom = el.sanitize.validInt('classificationZoom', classificationZoom, True)
+    token = el.sanitize.validString('token', token, False)
+    tempFolder = el.sanitize.validString('tempFolder', tempFolder, True)
+    modelNoDataValue = el.sanitize.validFloat('modelNoDataValue', modelNoDataValue,  True)
+    targetDate = el.sanitize.validDateRange('targetDate', targetDate, False)
+
 
 
     targetNoDataValue = modelNoDataValue
@@ -106,7 +113,7 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_fold
         
     print('creating a capture to write in')
 
-    targetCaptureId = el.path.raster.timestamp.add(pathId = targetBlockId, date= {'from':targetStartDate, 'to':targetEndDate}, token=token)['id']
+    targetCaptureId = el.path.raster.timestamp.add(pathId = targetPathId, date= {'from':targetStartDate, 'to':targetEndDate}, token=token)['id']
     print('writing to capture ' + targetCaptureId)
     if  str(type(bounds)) != "<class 'shapely.geometry.polygon.Polygon'>" and str(type(bounds)) != "<class 'shapely.geometry.multipolygon.MultiPolygon'>":
         raise ValueError('Bounds must be a shapely polygon or multipolygon')
@@ -119,17 +126,17 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_fold
     output = model({'tileX':0, 'tileY':0, 'zoom':classificationZoom})
 
     if str(type(output)) != "<class 'numpy.ndarray'>":
-        raise ValueError('Output of model funciton must be a 3 dimensional numpy array')
+        raise ValueError('Output of model funciton must be a 3 dimensional numpy array, with the band number in the first dimension')
         
-    if output.shape[0] != output.shape[1]:
-        raise ValueError('First and second dimension of the resutling numpy array of model should have equal length.')
+    if output.shape[1] != output.shape[2]:
+        raise ValueError('Second and third dimension of the resutling numpy array of model should have equal length.')
     if len(output.shape) != 3:
-        raise ValueError('Output of model funciton mus ba a 3 dimensional numpy array')
-    outputWidth = output.shape[0]
-    bands_out = output.shape[2]    
+        raise ValueError('Output of model function mus ba a 3 dimensional numpy array, with the band number in the first dimension')
+    outputWidth = output.shape[1]
+    bands_out = output.shape[0]    
     
     if outputWidth >2048 or bands_out > 40:
-        raise ValueError("output width of model may not exceed 2048 by 2048 by 40.")
+        raise ValueError("output of model may not exceed 40 by 2048 by 2048.")
 
 
     bound = bounds[0]        
@@ -148,7 +155,7 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_fold
         total = (x2_osm - x1_osm+1 + (10 - (x2_osm - x1_osm+1)%10 ) ) * (y2_osm-y1_osm +1 + (10 - (y2_osm-y1_osm +1) % 10) )
         frac = 0
         
-        metadata = el.path.get(targetBlockId, token)
+        metadata = el.path.get(targetPathId, token)
         if metadata['type'] != 'raster':
             raise ValueError('pathId is of type folder must be of type raster or vector')
         
@@ -156,7 +163,7 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_fold
         while x < x2_osm:
             y=y1_osm
             while y < y2_osm:
-                r_out = np.zeros(( 10*outputWidth, 10*outputWidth, bands_out+1))
+                r_out = np.zeros(( bands_out, 10*outputWidth, 10*outputWidth))
 
                 N = 0
                 for N in np.arange(10):
@@ -164,64 +171,39 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, temp_fold
                     for M in np.arange(10):
                         frac = frac+1
                         el.util.loadingBar( frac, total)
-                        tile = {'zoom':classificationZoom, 'tileX':x+N, 'tileY':y+M}
-                        r_out[M*outputWidth:(M+1)*outputWidth, N*outputWidth:(N+1)*outputWidth, 0:bands_out] = model( TileToBounds(tile))
+                        tile = {'zoom': int(classificationZoom), 'tileX': float(x+N), 'tileY': float(y+M)}
+                        r_out[:,M*outputWidth:(M+1)*outputWidth, N*outputWidth:(N+1)*outputWidth] = model( tile)
 
 
-                r_out[r_out[:,:,-2] !=targetNoDataValue,-1] = 1
-                r_out = np.transpose(r_out, [2,0,1])
-                r_out = r_out.astype('float32')
+
                 xMin = x/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
                 xMax = (x + 10)/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
                 yMin = (2**classificationZoom - y-10)/2**classificationZoom * 2 * 2.003751e+07 - 2.003751e+07
                 yMax = (2**classificationZoom - y )/2**classificationZoom * 2*2.003751e+07 - 2.003751e+07
                 trans = rasterio.transform.from_bounds(xMin, yMin, xMax, yMax, r_out.shape[2], r_out.shape[1])
                 crs = "EPSG:3857"
-                file = temp_folder + '/' + str(frac) + ".tif"
-
+                file = tempFolder + '/' + str(frac) + ".tif"
+                dtype = r_out.dtype
                 
-                with rasterio.open( file, 'w', compress="lzw", tiled=True, blockxsize=256, blockysize=256, count = bands_out+1, width=10*outputWidth, height=10*outputWidth, dtype = 'float32', transform=trans, crs=crs) as dataset:
+                with rasterio.open( file, 'w', compress="lzw", tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*outputWidth, height=10*outputWidth, dtype = dtype, transform=trans, crs=crs) as dataset:
                     dataset.write(r_out)
-                el.path.raster.timestamp.upload.add(pathId = targetBlockId, timestampId = targetCaptureId, filePath = file, token = token, fileFormat='tif')
+                el.path.raster.timestamp.file.add(pathId = targetPathId, timestampId = targetCaptureId, filePath = file, token = token, fileFormat='tif', noDataValue =  targetNoDataValue)
                 os.remove(file)
                 
                 y = y+10                
             x = x+10
 
-        captures = [c for c in metadata['raster']['timestamps'] if c['status'] == 'active']
-        if len(captures) ==0:
-            r = s.patch(url + '/path/' + targetBlockId + '/raster' , headers = {"Authorization":token},
-                             json = {'includesTransparent':True})
-            if int(str(r).split('[')[1].split(']')[0]) != 200:
-                raise ValueError(r.text)
 
         print('activating capture')
-        el.activateTimestamp(mapId = targetBlockId, timestampId=targetCaptureId, active = True, token = token)
+        el.path.raster.timestamp.activate(pathId = targetPathId, timestampId=targetCaptureId, token = token)
         print('capture activated result will be available soon')
 
 
-def TileToBounds(tile):
-    LEN = 2.003751e+07
-    x1_osm = tile['tileX']
-    y1_osm = tile['tileY']
-    readZoom  = tile['zoom']
-    
-    xMin = x1_osm * (2*LEN)/2**readZoom -LEN
-    xMax = (x1_osm + 1) * (2*LEN)/2**readZoom -LEN
-    yMax = -(y1_osm * (2*LEN)/2**readZoom -LEN)
-    yMin = -((y1_osm + 1) * (2*LEN)/2**readZoom -LEN)    
-    
-    p = geometry.Polygon( [(xMin, yMin), (xMin, yMax),(xMax, yMax),(xMax, yMin)] )
-    
-    sh = gpd.GeoDataFrame({'geometry':[p]})
-    sh.crs = 'EPSG:3857'
-    sh = sh.to_crs('EPSG:4326')
-    return sh['geometry'].values[0]
 
 def getTiles(bounds, classificationZoom):
     
-    if  str(type(bounds)) != "<class 'shapely.geometry.polygon.Polygon'>" and str(type(bounds)) != "<class 'shapely.geometry.multiPolygon.MultiPolygon'>":
-        raise ValueError('Bounds must be a shapely polygon or multipolygon')
+    bounds = el.sanitize.validShapely('bounds', bounds, True)
+    classificationZoom = el.sanitize.validInt('classificationZoom', classificationZoom, True)    
 
     
     if str(type(bounds)) == "<class 'shapely.geometry.polygon.Polygon'>":
@@ -285,74 +267,43 @@ def getTiles(bounds, classificationZoom):
     
     
 
-def getTileData(pathId, timestampId, tile, token, visualizationId = None, downsampleFactor = 1 ):
-    blockId = pathId
-    captureId = timestampId
+def getTileData(pathId, timestampId, tile, token = None ):
+    
+    pathId = el.sanitize.validUuid('pathId', pathId, True)
+    timestampId = el.sanitize.validUuid('timestampId', timestampId, True)
+    tile = el.sanitize.validObject('tile', tile, True)
+    token = el.sanitize.validString('token', token, False)
+    if not 'tileX' in tile.keys() or not 'tileY' in tile.keys() or not 'zoom' in tile.keys():
+        raise ValueError('tile parameter must contain keys, tileX, tileY and zoom, and must be float')
+    if type(tile['tileX']) != type(2.5) and type(tile['tileX']) != type(2) :
+        raise ValueError('tileX key in tile must be of type float')
+    if type(tile['tileY']) != type(2.5) and type(tile['tileY']) != type(2) :
+        raise ValueError('tileY key in tile must be of type float')
+    if type(tile['zoom']) != type(2) :
+        raise ValueError('zoom key in tile must be of type int')
     
     tileX = tile['tileX']
     tileY = tile['tileY']
-    tileZoom = tile['zoom']
+    zoom = tile['zoom']
     
-    def getTile(token_inurl, blockId, captureId, visualizationId,x,y,zoom, num_bands ):
-        url_req = url + '/tileService/' + blockId + '/' + str(captureId) + '/' + visualizationId + '/' + str(zoom) + '/' + str(x) + '/' + str(y) + token_inurl
-        r = s.get(url_req , timeout = 10 )
-        if int(str(r).split('[')[1].split(']')[0]) == 403:
-                raise ValueError('Insufficient permission for block ' + blockId)
-        elif int(str(r).split('[')[1].split(']')[0]) != 200:
-                r = np.zeros((256,256,num_bands))
-        elif visualizationId == 'data':
-            r = np.transpose(tifffile.imread(BytesIO(r.content)), [1,2,0] )      
-        else:
-           r = np.array(Image.open(BytesIO(r.content)), dtype = 'uint8')
-        return(r)
-        
-
-    if type(token) != type('x'):
-        raise ValueError('token must be of type string')
-
-    token_inurl = '?token=' + token.replace('Bearer ', '')
-
-    if type(visualizationId) == type(None):
-        visualizationId = 'data'
+    if( type(token) != type(None) and 'Bearer' in token):
+        token = token.replace('Bearer', '')
+        token = token.replace(' ', '')
+    url_req = url + '/path/' + pathId + '/raster/timestamp/' + timestampId + '/tile/' + str(zoom) + '/' + str(tileX) + '/' + str(tileY)
     
+    if (token != None):
+       url_req = url_req + '?token=' +  token
+       
+       
+    r = s.get(url_req , timeout = 10 )
+    if int(str(r).split('[')[1].split(']')[0]) == 403:
+            raise ValueError('Insufficient permission for layer ' + pathId)
+    elif r.status_code == 204:
+            return {'status':204, 'result':'no data'}
+    elif r.status_code != 200:
+            raise ValueError(r.text)            
     
-    
-    zoom = getZoom(blockId, captureId, token)
-    num_bands = getNumBands(blockId, captureId, token)
+    r = tifffile.imread(BytesIO(r.content))
 
-    if not downsampleFactor in np.arange(1,zoom+1):
-        raise ValueError('downsampleFactor must be in ' + str(np.arange(1,zoom+1)))
-    
-    
-    nativeZoom = zoom - downsampleFactor + 1
 
-    if nativeZoom >= tileZoom:
-        factor = 2**(nativeZoom - tileZoom)            
-        r_total = np.zeros((256*factor , 256*factor, num_bands))
-        for x in np.arange(factor):
-            for y in np.arange(factor):
-                r = getTile(token_inurl, blockId, captureId, visualizationId, tileX*factor + x, tileY*factor+y,nativeZoom, num_bands )
-                r_total[ y*256: (y*256 + 256), x*256: (x*256 + 256) ,:] = r
-
-    else:
-        factor = 2**(tileZoom-nativeZoom)
-
-        x = math.floor(tileX/factor)
-        y = math.floor(tileY/factor)
-        r = getTile(token_inurl, blockId, captureId, visualizationId, x, y,nativeZoom )                
-      
-        starty =   (tileY - y*factor) * 256/factor
-        endy = (tileY - y*factor + 1) * 256/factor
-        startx =   (tileX - x*factor) * 256/factor
-        endx = (tileX - x*factor + 1) * 256/factor
-
-        endy = math.floor(max(endy, starty+1))
-        endx = math.floor(max(endx, startx+1))
-        
-        r_total = r[starty:endy,startx:endx,:]
-        
-
-    return(r_total)
-    
-    
-    
+    return({'status':200, 'result':r})
