@@ -20,15 +20,21 @@ tempFolder = 'YOUR_PATH'
 token = el.account.logIn('YOUR_USERNAME','YOUR_PASSWORD')
 
 #retrieve the zoom and bounds of the capture you wish to classify
-classificationZoom = [t for t in el.path.get(pathId, token)['raster']['timestamps'] if t['id']== timestampId ][0]['zoom']
+classificationZoom = ai.getReccomendedClassificationZoom(pathId = pathId, timestampId = timestampId, token = token)
 bounds = el.path.raster.timestamp.getBounds(pathId, timestampId, token)
 
 
 #we create a dummy model. We use the identity function mapping an image to itself. We use the getTleData function to retirve the image for the given input tile ofthe model.
-def model(bounds):
-    extent = {'xMin':bounds.bounds[0],'yMin':bounds.bounds[1],'xMax':bounds.bounds[2],'yMax':bounds.bounds[3]}
-    result = el.path.raster.timestamp.getRaster(pathId=pathId, timestampId=timestampId, extent = extent,  token= token)
-    return(result)
+def model(tile):
+    result = ai.getTileData(pathId = pathId, timestampId = timestampId, tile = tile, token  = token)
+    if result['status'] == 204:
+        output =  np.zeros((1,256,256))
+    else:
+        r = result['result']
+
+        output = r[0:1,:,:] * 2
+    return(output)
+
 
 #apply the model on the given bounds on the given zoomlevel
 ai.applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder)
@@ -54,8 +60,7 @@ This function applies the given model on all tiles of zoomlevel classificationZo
 | token        | Your token|
 | tempFolder        | A path where temporary files can be written|
 | modelNoDataValue        | Which number of the model output to interpret as transparent|
-| targetFromDate        | datetime object with date to use for the timestamp to which the results will be written. Defaults to current date|
-| targetToDate        | datetime object with date to use for the timestamp to which the results will be written. Defaults to current date|
+| targetDate        | Dictionary with keys from and to, both must be of type datetime. Defaults to current date|
 
 
 
@@ -71,5 +76,37 @@ This function covers a given bounds with tiles of the given zoomlevel. You can u
 | ----------- | -----------|
 | bounds     | A shapely polygon or multipolygon |
 | classificationZoom        | The zoomlevel of the tiles to cover with as int |
+
+
+
+#### getTileData
+
+```python
+getTileData(pathId, timestampId, tile, token = None )
+```
+
+This function retrieves raster data for a certain tile.
+
+| Name        | Description |
+| ----------- | -----------|
+| PathId     | Id of the layer to retrieve the raster for |
+| timestampId        | Id of the timestamp to retrieve the raster for |
+| tile        | A dictionary with tileX, tileY and zoom as integers |
+| token        | Your token (optional) |
+
+#### getReccomendedClassificationZoom
+
+```python
+getReccomendedClassificationZoom(pathId, timestampId, token = None)
+```
+
+This function retrieves raster data for a certain tile.
+
+| Name        | Description |
+| ----------- | -----------|
+| PathId     | Id of the layer to retrieve the raster for |
+| timestampId        | Id of the timestamp to retrieve the raster for |
+| token        | Your token (optional) |
+
 
 
