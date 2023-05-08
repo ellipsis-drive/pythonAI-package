@@ -14,7 +14,7 @@ import geopandas as gpd
 from shapely import geometry
 import pandas as pd
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 url = 'https://api.ellipsis-drive.com/v3'
 
 s = requests.Session()

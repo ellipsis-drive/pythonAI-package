@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="ellipsisAI",
-    version="0.1.0",
+    version="0.1.1",
     author="Daniel van der Maas",
     author_email="daniel@ellipsis-drive.com",
     description="Package to use Ellipsis Drive for AI",
