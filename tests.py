@@ -1,73 +1,40 @@
-import numpy as np
 import ellipsisAI as ai
 import ellipsis as el
-
-pathId = '27e49a17-fae9-48d4-a861-b6da59ae5994'
-timestampId = "109af860-da06-4c4e-ae01-b5703cdb3da0"
-
-targetPathId = "27d150d4-bc0f-4dcf-9b00-80452c02f14b"
-temp_folder = '/home/daniel/Downloads'
-
-token = el.account.logIn('daan','')
-
-classificationZoom = ai.getZoom(pathId, timestampId, token)
-
-bounds = ai.getBounds(pathId, timestampId, token)
+import numpy as np
+import sys
 
 
-#we create a dummy model. We use the identity funciton mapping an image to itself
-def model(bounds):
-    #for raster use getTileData
-    #for vector use el.path.vector.timestamp.getFeaturesByExtent(pathId, timestampId, extent)
-    #insert some super integelgent logic here
-    return(image)
-    
-
-#model is a function mapping a tile to a 3D numpy array, width by height by bands
-#bounds is a shapely polygon or multipolygon of the region to classify
-#temfolder is some temporary folder the script can use (sorry bit ugly I should be using memory files)
-# classificationZoom is the zoomlevel on which to classify the layer
-#targetPathId where to create the classification layer
+pathId = 'b95ea2fb-8415-4c54-a6cc-f3d11258b7f8'
+timestampId = "dc32dc29-1664-449a-a09e-ae5042c60f62"
+targetPathId = "4262bc2e-66df-438d-8550-b224462c3722"
+token = "epat_0UdLYCO6WCKS7H52ra30WxJBqMYjmJgsWTndJV8PrplLYjnn7qfgYMo4hcTDrGJb"
 
 
-ai.applyModel(model, bounds, targetPathId, classificationZoom, token, temp_folder)
+pathId = sys.argv[1]
+timestampId =  int(sys.argv[2])
+targetPathId = int(sys.argv[3])
+token = int(sys.argv[4])
 
 
 
-r = getTileData(pathId=blockId, timestampId=captureId, tile={'tileX':0, 'tileY':0, 'zoom':0}, token=token )
-
-el.path.vector.timestamp.getFeaturesByExtent(pathId, timestampId, extent)
-
-
-
-print(np.unique(r))
-
-tiles = ai.getTiles(bounds, classificationZoom)
+#retrieve the zoom and bounds of the capture you wish to classify
+classificationZoom = ai.getReccomendedClassificationZoom(pathId = pathId, timestampId = timestampId, token = token)
+bounds = el.path.raster.timestamp.getBounds(pathId, timestampId, token)
 
 
+#we create a dummy model. We use the identity function mapping an image to itself. We use the getTleData function to retirve the image for the given input tile ofthe model.
+def model(tile):
+    result = ai.getTileData(pathId = pathId, timestampId = timestampId, tile = tile, token  = token)
+    if result['status'] == 204:
+        output =  np.zeros((1,256,256))
+        output[:,:,:] = -1
+    else:
+        r = result['result']
+
+        output = (r[7,:,:] -r[3,:,:]) / (r[7,:,:] + r[3,:,:])
+    return(output)
 
 
-#########
-features = el.path.vector.timestamp.listFeatures(pathId, timestampId)
-
-el.path.vector.featureProperty.add(pathId, 'classification', 'string' )
-
-classifications = []
-for feature in featuers:
-    extent = feature.bounds + some buffer
-    
-    r = el.path.raster.timestamp.getRaster(pathId, timestampId, extent)
-    #repeat for other layers you would want to use
-    classification = model()
-    #apply some logic to create classification
-    classifcations = classifications + [classification]    
-
-features['classifications'] = classifications
-el.path.vector.timestamp.feature.edit(pathId, timestampId, featureIds = features['id'].values, token, features)
-    
-
-
-
-
-
+#apply the model on the given bounds on the given zoomlevel
+ai.applyModel(model = model, bounds = bounds, targetPathId = targetPathId, classificationZoom = classificationZoom, token=token)
 
