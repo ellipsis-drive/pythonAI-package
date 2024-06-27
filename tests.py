@@ -1,12 +1,28 @@
 import ellipsisAI as ai
 import ellipsis as el
 import numpy as np
+<<<<<<< HEAD
+=======
+import sys
+
+>>>>>>> b645634da26951d3083f9e9f999bb6c55960975d
 
 pathId = 'b95ea2fb-8415-4c54-a6cc-f3d11258b7f8'
 timestampId = "dc32dc29-1664-449a-a09e-ae5042c60f62"
 targetPathId = "4262bc2e-66df-438d-8550-b224462c3722"
 token = "epat_0UdLYCO6WCKS7H52ra30WxJBqMYjmJgsWTndJV8PrplLYjnn7qfgYMo4hcTDrGJb"
 
+<<<<<<< HEAD
+=======
+
+pathId = sys.argv[1]
+timestampId =  int(sys.argv[2])
+targetPathId = int(sys.argv[3])
+token = int(sys.argv[4])
+
+
+
+>>>>>>> b645634da26951d3083f9e9f999bb6c55960975d
 #retrieve the zoom and bounds of the capture you wish to classify
 classificationZoom = ai.getReccomendedClassificationZoom(pathId = pathId, timestampId = timestampId, token = token)
 bounds = el.path.raster.timestamp.getBounds(pathId, timestampId, token)
