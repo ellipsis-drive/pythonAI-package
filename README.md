@@ -46,7 +46,7 @@ ai.applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder
 #### applyModel
 
 ```python
-applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder, modelNoDataValue = -1, targetFromDate = None, targetToDate = None)
+applyModel(model, bounds, targetPathId, classificationZoom, token, modelNoDataValue = -1, targetFromDate = None, targetToDate = None)
 ```
 
 This function applies the given model on all tiles of zoomlevel classificationZoom withing the specified bounds. The results will be written in a new capture of the specified target block.

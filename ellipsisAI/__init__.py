@@ -6,16 +6,14 @@ import ellipsis as el
 import math
 from datetime import datetime
 import tifffile
-from io import BytesIO
 import requests
-import os
-import rasterio
 import geopandas as gpd
 from shapely import geometry
 import pandas as pd
+from io import BytesIO
 
-__version__ = '0.1.1'
-url = 'https://api.ellipsis-drive.com/v3'
+__version__ = '0.1.2'
+url = el.apiManager.baseUrl
 
 s = requests.Session()
 
@@ -24,11 +22,11 @@ cacheBands = {}
 
     
 
-def getZoom(pathId, timestampId, token = None):
+def getReccomendedClassificationZoom(pathId, timestampId, token = None):
     
     pathId = el.sanitize.validUuid('pathId', pathId, True)
     timestampId = el.sanitize.validUuid('timestampId', timestampId, True)
-    token = el.validString('token', token, False)    
+    token = el.sanitize.validString('token', token, False)    
     
     blockId = pathId
     captureId = timestampId
@@ -56,33 +54,7 @@ def getZoom(pathId, timestampId, token = None):
 
 
 
-
-def getBounds(pathId, timestampId, token = None):
-    
-    pathId = el.sanitize.validUuid('pathId', pathId, True)
-    timestampId = el.sanitize.validUuid('timestampId', timestampId, True)
-    token = el.sanitize.validString('token', token, False)    
-    
-    
-    blockId = pathId
-    captureId = timestampId
-    metadata = el.path.get(blockId, token)
-    if metadata['type'] == 'folder':
-        raise ValueError('pathId is of type folder must be of type raster or vector')
-
-
-    captures = [c for c in metadata['raster']['timestamps'] if c['id'] == captureId]
-    
-    if len(captures) == 0:
-        raise ValueError('given captureId does not exist')
-
-    timestamp = captures[0]['id']
-    
-    bounds = el.path.raster.timestamp.getBounds(pathId = blockId, timestampId = timestamp, token = token )
-    
-    return(bounds)
-
-def applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolder, modelNoDataValue = -1, targetDate = None):
+def applyModel(model, bounds, targetPathId, classificationZoom, token, modelNoDataValue = -1, targetDate = None):
     def f():
         return
 
@@ -99,22 +71,20 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolde
     bounds = el.sanitize.validShapely('bounds', bounds, True)
     classificationZoom = el.sanitize.validInt('classificationZoom', classificationZoom, True)
     token = el.sanitize.validString('token', token, False)
-    tempFolder = el.sanitize.validString('tempFolder', tempFolder, True)
     modelNoDataValue = el.sanitize.validFloat('modelNoDataValue', modelNoDataValue,  True)
     targetDate = el.sanitize.validDateRange('targetDate', targetDate, False)
 
 
 
-    targetNoDataValue = modelNoDataValue
-    
-    if not 'float' in str(type(targetNoDataValue)) and not 'int' in str(type(targetNoDataValue)) :
-        raise ValueError('targetNoDataValue must be of type float')
-        
-        
-    print('creating a capture to write in')
 
-    targetCaptureId = el.path.raster.timestamp.add(pathId = targetPathId, date= {'from':targetStartDate, 'to':targetEndDate}, token=token)['id']
-    print('writing to capture ' + targetCaptureId)
+        
+    print('creating a timestamp to write in')
+    print(targetDate)
+    if type(targetDate) == type(None):
+        targetCaptureId = el.path.raster.timestamp.add(pathId = targetPathId, token=token)['id']
+    else:
+        targetCaptureId = el.path.raster.timestamp.add(pathId = targetPathId, date= targetDate, token=token)['id']
+    print('writing to timestamp ' + targetCaptureId)
     if  str(type(bounds)) != "<class 'shapely.geometry.polygon.Polygon'>" and str(type(bounds)) != "<class 'shapely.geometry.multipolygon.MultiPolygon'>":
         raise ValueError('Bounds must be a shapely polygon or multipolygon')
         
@@ -180,23 +150,26 @@ def applyModel(model, bounds, targetPathId, classificationZoom, token, tempFolde
                 xMax = (x + 10)/2**classificationZoom *2* 2.003751e+07 - 2.003751e+07
                 yMin = (2**classificationZoom - y-10)/2**classificationZoom * 2 * 2.003751e+07 - 2.003751e+07
                 yMax = (2**classificationZoom - y )/2**classificationZoom * 2*2.003751e+07 - 2.003751e+07
-                trans = rasterio.transform.from_bounds(xMin, yMin, xMax, yMax, r_out.shape[2], r_out.shape[1])
-                crs = "EPSG:3857"
-                file = tempFolder + '/' + str(frac) + ".tif"
-                dtype = r_out.dtype
-                
-                with rasterio.open( file, 'w', compress="lzw", tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*outputWidth, height=10*outputWidth, dtype = dtype, transform=trans, crs=crs) as dataset:
-                    dataset.write(r_out)
-                el.path.raster.timestamp.file.add(pathId = targetPathId, timestampId = targetCaptureId, filePath = file, token = token, fileFormat='tif', noDataValue =  targetNoDataValue)
-                os.remove(file)
-                
+                #trans = rasterio.transform.from_bounds(xMin, yMin, xMax, yMax, r_out.shape[2], r_out.shape[1])
+                #crs = "EPSG:3857"
+
+                #dtype = r_out.dtype
+                c = BytesIO()
+                mem_file = el.util.saveRaster(r = r_out, targetFile=c, epsg = 3857, extent = {'xMin':xMin, 'xMax':xMax, 'yMin':yMin, 'yMax':yMax})
+
+                #with rasterio.open( file, 'w', compress="lzw", tiled=True, blockxsize=256, blockysize=256, count = bands_out, width=10*outputWidth, height=10*outputWidth, dtype = dtype, transform=trans, crs=crs) as dataset:
+                #    dataset.write(r_out)
+                name = str(x) + '_' + str(y) + '.tif'
+                el.path.raster.timestamp.file.add(name= name , pathId = targetPathId, timestampId = targetCaptureId, memFile = mem_file, token = token, fileFormat='tif', noDataValue =   modelNoDataValue )
+
                 y = y+10                
             x = x+10
 
 
-        print('activating capture')
+        print('activating timestamp')
         el.path.raster.timestamp.activate(pathId = targetPathId, timestampId=targetCaptureId, token = token)
-        print('capture activated result will be available soon')
+        print('timestamp activated result will be available soon')
+        print('Checkout https://app.ellipsis-drive.com/drive/external?pathId=' + targetPathId + ' to see progress.')
 
 
 
